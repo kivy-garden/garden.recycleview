@@ -21,4 +21,10 @@ This widget is under heavy work and API is still uncertain. Don't use unless you
 
 See the contacts demo:
 
+    export PYTHONPATH=$PWD:$PYTHONPATH
     python examples/contacts/main.py
+
+Or the wallimage demo:
+
+    export PYTHONPATH=$PWD:$PYTHONPATH
+    python examples/wallimage/main.py
