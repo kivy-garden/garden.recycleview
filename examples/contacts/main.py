@@ -5,7 +5,7 @@ from kivy.app import App
 from kivy.metrics import sp
 import random
 
-Builder.load_string("""
+KV = """
 <ContactSeparator@Widget>:
     canvas.before:
         Color:
@@ -37,10 +37,37 @@ Builder.load_string("""
         text: root.contact_name
         color: (0, 0, 0, 1)
         text_size: (self.width, None)
-""")
+
+# app example
+BoxLayout:
+    orientation: "vertical"
+    BoxLayout:
+        padding: "2sp"
+        spacing: "2sp"
+        size_hint_y: None
+        height: "48sp"
+
+        Button:
+            text: "Sort data"
+            on_release: app.sort_data()
+
+        Button:
+            text: "Generate new data"
+            on_release: app.generate_new_data()
+
+    RecycleView:
+        id: rv
+"""
 
 class RecycleViewApp(App):
     def build(self):
+        self.root = Builder.load_string(KV)
+        rv = self.root.ids.rv
+        rv.key_viewclass = "viewclass"
+        rv.key_size = "height"
+        self.generate_new_data()
+
+    def generate_new_data(self):
         # Create a data set
         contacts = []
         names = ["Robert", "George", "Joseph", "Donald", "Mark", "Anthony", "Gary"]
@@ -49,7 +76,7 @@ class RecycleViewApp(App):
             "http://www.geglobalresearch.com/media/Alhart-Todd-45x45.jpg",
         ]
         for x in range(1000):
-            if x % 20 == 0:
+            if x % 100 == 0:
                 contacts.append({
                     "viewclass": "ContactSeparator",
                     "height": sp(20)
@@ -64,10 +91,15 @@ class RecycleViewApp(App):
                 )
             })
 
-        rv = RecycleView()
-        rv.key_viewclass = "viewclass"
-        rv.key_height = "height"
-        rv.data = contacts
-        return rv
+        self.root.ids.rv.data = contacts
+
+    def sort_data(self):
+        data = self.root.ids.rv.data
+        def sort_contacts(contact):
+            if contact["viewclass"] == "ContactSeparator":
+                return ""
+            return contact["contact_name"]
+        data = sorted(data, key=sort_contacts)
+        self.root.ids.rv.data = data
 
 RecycleViewApp().run()
