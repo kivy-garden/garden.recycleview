@@ -1,4 +1,4 @@
-from recycleview import RecycleView
+from kivy.garden.recycleview import RecycleView
 from kivy.base import runTouchApp
 from kivy.lang import Builder
 from kivy.app import App
@@ -72,7 +72,7 @@ class RecycleViewApp(App):
         contacts = []
         names = ["Robert", "George", "Joseph", "Donald", "Mark", "Anthony", "Gary"]
         medias = [
-            "http://pbs.twimg.com/profile_images/3312895495/8e39061bdad2b5d18dc8a9be63a2f50a_normal.png",
+            "http://www.geglobalresearch.com/media/Alhart-Todd-45x45.jpg",
             "http://www.geglobalresearch.com/media/Alhart-Todd-45x45.jpg",
         ]
         for x in range(1000):
