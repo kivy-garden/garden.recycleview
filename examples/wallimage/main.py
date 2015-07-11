@@ -1,6 +1,6 @@
 from kivy.app import App
 from kivy.properties import ListProperty
-from recycleview import RecycleView
+from kivy.garden.recycleview import RecycleView
 from kivy.lang import Builder
 from os.path import dirname, join
 from glob import glob
