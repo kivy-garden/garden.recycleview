@@ -1,3 +1,4 @@
 __version__ = "0.1"
 from .recycleview import RecycleView, RecycleLayoutManager, \
-    LinearRecycleLayoutManager, RecycleAdapter
+    LinearRecycleLayoutManager, RecycleAdapter, ViewBaseClass, \
+    LayoutChangeException
