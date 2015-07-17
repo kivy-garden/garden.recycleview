@@ -13,11 +13,15 @@ scroll_type=['bars', 'content'], bar_width=10)
         'halign': 'center', 'color': (0, 1, 1, 1)
     }] * 10000
     runTouchApp(view)
+
+.. note::
+    Requires kivy 1.9.1
 '''
 
 from bisect import bisect_left
 
-from kivy.garden.recycleview import ViewBaseClass, LayoutChangeException
+from kivy import require
+from kivy.garden.recycleview import RecycleViewMixin, LayoutChangeException
 from kivy.uix.label import Label
 from kivy.core.text import Label as CoreLabel
 from kivy.core.text.markup import MarkupLabel as CoreMarkupLabel
@@ -26,6 +30,8 @@ from kivy.properties import ListProperty, NumericProperty, BooleanProperty
 from kivy.properties import VariableListProperty, ObjectProperty
 from kivy.lang import Builder
 from kivy.graphics.texture import Texture
+
+require('1.9.1')
 
 
 Builder.load_string('''
@@ -36,7 +42,7 @@ Builder.load_string('''
 (self.color if not self.markup else (1, 1, 1, 1))
         Rectangle:
             texture: self.texture
-            size: self.true_texture_size
+            size: self._true_texture_size
             pos: int(self.center_x - self.texture_size[0] / 2.), \
 int(self._texture_pos_y)
 ''')
@@ -49,23 +55,24 @@ def accumulate_lines(lines, y):
     yield y
 
 
-class LazyLabel(Label, ViewBaseClass):
+class LazyLabel(Label, RecycleViewMixin):
     '''A Label class for use with RecycleView. See module.
     '''
 
-    # y pos of each line within the label widget relative to the top
-    _lines_pos = []
-    # the y pos of the top of last line
+    # y pos of top of each line within the label widget relative to the top
+    _lines_pos = None
+    # the y pos of the bottom of the last line
     _last_line_top = 0
     # pos of the smaller rendered texture as tuple of (bottom, top) in
     # coordinates relative to the top of the widget
     _last_rendered_view = None
-    _label_cache = {}
+    _label_cache = {}  # unused currently
     # where we save the default options of the label
     _default_options = None
-    # the y pos in the texture (starting from the top) where 1st line starts
+    # the y pos in the normal label texture (starting from the top) where 1st
+    # line starts
     _texture_y = 0
-    # the last height of the widget
+    # the last known height of the label widget
     _last_height = 0
     # the recycleview used with the label
     _rv = None
@@ -74,38 +81,29 @@ class LazyLabel(Label, ViewBaseClass):
     '''The pos of the actual texture giving the view into the data.
     '''
 
-    true_texture_size = ListProperty([0, 0])
-    '''The size of the texture used for the view. :attr:`texture_size` is the
-    size of the overall texture required to hold all the data, even though
-    the texture is only the size of :attr:`true_texture_size`.
+    _true_texture_size = ListProperty([0, 0])
+    ''' (Internal) The size of the texture used for the view.
+    :attr:`texture_size` is the size of the overall texture required to hold
+    all the text, even though the :attr:`texture` is only the size of
+    :attr:`_true_texture_size`.
     '''
-    size_to_texture = ListProperty([False, True])
-    '''For width, height, whether to set the width, height to the corresponding
-    texture width/height of :attr:`texture_size`. Defaults to `[False, True]`
+    size_to_texture_height = BooleanProperty(True)
+    '''Whether to set the height of :class:`LazyLabel` to the
+    texture height, :attr:`texture_size`[1]. Defaults to True
     so that by default, the height will be set to the height of the
     texture.
+
+    When True, we'll set the height of the label using the
+    `key_size` key in the data dict for this view. If `key_size` is empty,
+    `key_size` will be set to `'height'`. Either way, the data dict
+    `key_size` key will have its value set to the texture height.
+
     '''
-    limit_text_width = BooleanProperty(True)
+    constrain_text_width = BooleanProperty(True)
     '''Whether to force :attr:`text_size[0]` to the width of the label.
-    Defaults to True.
+    Defaults to True. If True, the width of the :attr:`texture` will the
+    width of the view.
     '''
-
-    def __init__(self, **kwargs):
-        super(LazyLabel, self).__init__(**kwargs)
-        def set_text_width(*largs):
-            if self.limit_text_width:
-                self.text_size[0] = self.width
-
-        def set_size(*largs):
-            size_to = self.size_to_texture
-            sz = self.texture_size
-            if size_to[0]:
-                self.width = sz[0]
-            if size_to[1]:
-                self.height = sz[1]
-
-        self.fbind('width', set_text_width)
-        self.fbind('texture_size', set_size)
 
     def texture_update(self, *largs):
         '''Force texture recreation with the current Label properties.
@@ -115,12 +113,13 @@ class LazyLabel(Label, ViewBaseClass):
         :attr:`texture` will remain None. Only when :attr:`refresh_view_layout`
         is called, will the currently visible text be rendered.
         '''
+        # do the same stuff as in label
         label = self._label
         mrkup = label.__class__ is CoreMarkupLabel
         self.texture = None
         self._lines_pos = None
         self._last_height = 0
-        self.true_texture_size = 0, 0
+        self._true_texture_size = 0, 0
         if mrkup:
             self.refs = {}
             label._refs = self.refs
@@ -148,7 +147,8 @@ class LazyLabel(Label, ViewBaseClass):
         # the size of this label
         label.resolve_font_name()
         # first pass, calculating width/height
-        label._size_texture = sz = label.render()
+        sz = label.render()
+
 
         # if no text are rendered, return nothing.
         width, height = sz
@@ -171,35 +171,43 @@ class LazyLabel(Label, ViewBaseClass):
             y = sz[1] - ih + ypad
         elif valign == 'middle':
             y = int((sz[1] - ih) / 2 + ypad)
-        # compute where in the texture the first line should start
+        # save where in the texture the first line should start
         self._texture_y = y
 
     def _reload_observer(self, *largs):
         self._last_rendered_view = (-1, 0)  # force a redraw
         self._rv.ask_refresh_viewport()
 
-    def refresh_view_attrs(self, rv, data):
-        super(LazyLabel, self).refresh_view_attrs(rv, data)
+    def refresh_view_attrs(self, rv, index, data):
+        super(LazyLabel, self).refresh_view_attrs(rv, index, data)
         self._label_cache = {}
+        self._lines_pos = None
         self._rv = rv
+        if self.size_to_texture_height:
+            if not rv.key_size:
+                rv.key_size = 'height'
 
-    def refresh_view_layout(self, rv, viewport, data, width, height):
+    def refresh_view_layout(self, rv, index, pos, size, viewport):
         # first set the new size
         super(LazyLabel, self).refresh_view_layout(
-            rv, viewport, data, width, height)
+            rv, index, list(pos), list(size), viewport)
+        width, height = size
+        if self.constrain_text_width and self.text_size[0] != self.width:
+            self.text_size[0] = self.width
+
         # if we were triggered, do it now
-        if self._trigger_texture.is_triggered:
+        # only refresh_view_attrs and this method can cause a trigger of
+        # _trigger_texture. Because refresh_view_layout follows
+        # refresh_view_attrs in the same frame, if it was triggered we can
+        # deal with it here.
+        if (self._trigger_texture.is_triggered or
+            height != self.texture_size[1] and self.size_to_texture_height):
             # This is called at the end of frame already, so don't delay
             self._trigger_texture.cancel()
             self.texture_update()
-            # if the size changed we should save it to data
-            if self.width != width:
-                data['width'] = self.width
-                rv.ask_refresh_from_data(extent='data_size')
-                # stop execution early so we don't have to draw further
-                raise LayoutChangeException()
-            if self.height != height:
-                data['height'] = self.height
+            # if the height changed we should save it to data
+            if self.size_to_texture_height and height != self.texture_size[1]:
+                rv.data[index][rv.key_size] = self.texture_size[1]
                 rv.ask_refresh_from_data(extent='data_size')
                 raise LayoutChangeException()
 
@@ -212,9 +220,11 @@ class LazyLabel(Label, ViewBaseClass):
         lines = label._cached_lines
         # we need to do the initial setup or if the view became larger
         if (self._lines_pos is None or self._last_height != height or
-            self.true_texture_size[1] - 3 * view_height > 0.01):
+            self._true_texture_size[1] - 3 * view_height > 0.01):
             tex_height = min(sz[1], 3 * view_height)
-            label._size = tex_size = self.true_texture_size = (sz[0], tex_height)
+            label._size_texture = label._size = tex_size = \
+                self._true_texture_size = (sz[0], tex_height)
+            print tex_size
 
             # The texture will be centered in x dim by kv lang, currently,
             # _texture_y is in coordinates relative to the top of the texture.
@@ -256,7 +266,7 @@ class LazyLabel(Label, ViewBaseClass):
         label._render_begin()
         label.render_lines(
             lines[s:e], self._default_options, label._render_text,
-            pos[s] - (ty2 - view_height), self.true_texture_size)
+            pos[s] - (ty2 - view_height), self._true_texture_size)
         data = label._render_end()
         label.options = old_opts
 

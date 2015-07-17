@@ -78,7 +78,7 @@ class RecycleViewMixin(object):
     when the view needs to be updated due to a data change or layout update.
     '''
 
-    def refresh_view_attrs(self, rv, data):
+    def refresh_view_attrs(self, rv, index, data):
         '''Called by the :class:`RecycleAdapter` when the view is initially
         populated with the values from the `data` dictionary for this item.
 
@@ -186,7 +186,7 @@ class RecycleAdapter(EventDispatcher):
             _view_base_cache[viewclass] = isinstance(view, RecycleViewMixin)
 
         if _view_base_cache[viewclass]:
-            view.refresh_view_attrs(self.recycleview, item)
+            view.refresh_view_attrs(self.recycleview, index, item)
         else:
             for key, value in item.items():
                 setattr(view, key, value)
@@ -235,7 +235,7 @@ class RecycleAdapter(EventDispatcher):
                                                          RecycleViewMixin)
 
             if _view_base_cache[viewclass]:
-                view.refresh_view_attrs(rv, item)
+                view.refresh_view_attrs(rv, index, item)
             else:
                 for key, value in item.items():
                     setattr(view, key, value)
