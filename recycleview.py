@@ -289,7 +289,9 @@ class RecycleAdapter(EventDispatcher):
         if not views:
             return
         global _cache_count
+        remove = self.recycleview.container.remove_widget
         for view in views.values():
+            remove(view)
             _cached_views[view.__class__].append(view)
             _cache_count += 1
 
